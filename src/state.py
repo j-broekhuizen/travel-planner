@@ -24,17 +24,3 @@ class DealEngineState(TypedDict):
 
     # Email generation
     email_content: NotRequired[Optional[str]]
-
-    # Routing & control
-    current_step: NotRequired[
-        Literal[
-            "start",
-            "opportunity_analysis",
-            "meeting_preparation",
-            "email_generation",
-            "complete",
-        ]
-    ]
-    requested_agents: NotRequired[
-        Optional[List[str]]
-    ]  # Track which agents have been called

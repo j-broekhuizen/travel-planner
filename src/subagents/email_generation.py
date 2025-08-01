@@ -6,10 +6,10 @@ from langgraph.graph import StateGraph, START, END
 
 
 def llm(state: DealEngineState):
-    opportunity_analysis = state["opportunity_analysis"]
-    next_best_action = state["best_action"]
-    reasoning = state["reasoning"]
-    meeting_prep = state["meeting_prep_doc"]
+    opportunity_analysis = state.get("opportunity_analysis", "No opportunity analysis available")
+    next_best_action = state.get("best_action", "No specific action identified")
+    reasoning = state.get("reasoning", "No reasoning provided")
+    meeting_prep = state.get("meeting_prep_doc", "No meeting preparation available")
     prompt = EMAIL_GENERATION_PROMPT.format(
         opportunity_analysis=opportunity_analysis,
         next_best_action=next_best_action,

@@ -21,7 +21,7 @@ class NextBestActionSchema(BaseModel):
 
 
 def llm(state: DealEngineState):
-    opportunity_analysis = state["opportunity_analysis"]
+    opportunity_analysis = state.get("opportunity_analysis", "No opportunity analysis available")
     prompt = NEXT_BEST_ACTION_PROMPT.format(opportunity_analysis=opportunity_analysis)
     structured_model = model.with_structured_output(NextBestActionSchema)
     response = structured_model.invoke(prompt)
