@@ -4,56 +4,70 @@ from src.tools import extract_opportunity_id, get_opportunity
 from src.model import model
 from src.prompts import OPPORTUNITY_ANALYSIS_PROMPT
 from langgraph.graph import StateGraph, START, END
+from typing import Literal
+from langchain_core.messages import SystemMessage
+
+opportunity_analysis_tools = [extract_opportunity_id, get_opportunity]
+tools_by_name = {tool.name: tool for tool in opportunity_analysis_tools}
+model_with_tools = model.bind_tools(opportunity_analysis_tools)
 
 
-def extract_opportunity_id_node(state: DealEngineState):
-    messages = state["messages"]
-    opportunity_id = None
-    for msg in reversed(messages):
-        if hasattr(msg, "content") and msg.content:
-            extracted = extract_opportunity_id.invoke(msg.content)
-            if extracted:
-                opportunity_id = extracted
-                break
-    print(f"Extracted opportunity ID: {opportunity_id}")
-    if opportunity_id is None:
-        raise ValueError("No opportunity ID found in messages")
-    return Command(update={"opportunity_id": opportunity_id})
+async def tool_handler(state: DealEngineState):
+    """Performs the tool call."""
 
-
-def fetch_opportunity_data_node(state: DealEngineState):
-    opportunity_id = state["opportunity_id"]
-    opportunity = get_opportunity.invoke({"opportunity_id": opportunity_id})
-    if opportunity is None:
-        return Command(
-            update={"opportunity_data": f"Opportunity {opportunity_id} not found"}
+    result = []
+    # Iterate through tool calls
+    for tool_call in state["messages"][-1].tool_calls:
+        # Get the tool
+        tool = tools_by_name[tool_call["name"]]
+        # Run it
+        observation = tool.invoke(tool_call["args"])
+        # Create a tool message
+        result.append(
+            {"role": "tool", "content": observation, "tool_call_id": tool_call["id"]}
         )
-    opportunity_dict = (
-        opportunity.model_dump()
-        if hasattr(opportunity, "model_dump")
-        else opportunity.__dict__
-    )
-    return Command(update={"opportunity_data": opportunity_dict})
+
+    # Add it to our messages
+    return {"messages": result}
 
 
-def llm(state: DealEngineState):
-    opportunity_data = state["opportunity_data"]
-    if isinstance(opportunity_data, str) and "not found" in opportunity_data:
-        return Command(update={"opportunity_analysis": opportunity_data})
-    prompt = OPPORTUNITY_ANALYSIS_PROMPT.format(opportunity_data=opportunity_data)
-    response = model.invoke(prompt)
-    return Command(update={"opportunity_analysis": response})
+async def llm(state: DealEngineState):
+    messages = state["messages"]
+    messages_with_system = [
+        SystemMessage(content=OPPORTUNITY_ANALYSIS_PROMPT)
+    ] + messages
+    response = await model_with_tools.ainvoke(messages_with_system)
+    return Command(update={"messages": [response]})
+
+
+def should_continue(state: DealEngineState) -> Literal["tool_handler", "__end__"]:
+    """Route to tool handler, or end if no more tool calls."""
+
+    # Get the last message
+    messages = state["messages"]
+    last_message = messages[-1]
+
+    if not last_message.tool_calls:
+        return END
+    else:
+        return "tool_handler"
 
 
 # Build the graph
 graph = StateGraph(DealEngineState)
-graph.add_node("extract_opportunity_id", extract_opportunity_id_node)
-graph.add_node("fetch_opportunity_data", fetch_opportunity_data_node)
 graph.add_node("llm", llm)
+graph.add_node("tool_handler", tool_handler)
 
-graph.add_edge(START, "extract_opportunity_id")
-graph.add_edge("extract_opportunity_id", "fetch_opportunity_data")
-graph.add_edge("fetch_opportunity_data", "llm")
-graph.add_edge("llm", END)
+graph.add_conditional_edges(
+    "llm",
+    should_continue,
+    {
+        "tool_handler": "tool_handler",
+        "__end__": END,
+    },
+)
+
+graph.add_edge(START, "llm")
+graph.add_edge("tool_handler", "llm")
 
 opportunity_analysis_agent = graph.compile()
