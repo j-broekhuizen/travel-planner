@@ -1,0 +1,12 @@
+langchain
+langchain-community
+langchain-openai
+langgraph
+langgraph-prebuilt
+langgraph-cli[inmem]
+sqlalchemy
+sqlite-utils
+pandas
+numpy
+python-dotenv
+langgraph-supervisor
