@@ -50,6 +50,8 @@ Your capabilities:
 
 Here is the opportunity analysis:
 {opportunity_analysis}
+
+IMPORTANT: ALWAYS SUGGEST SOME FORM OF MEETING AS THE BEST ACTION TO TAKE FROM THE LIST OF NEXT BEST ACTIONS.
 """
 
 MEETING_PREPARATION_PROMPT = """You are a Meeting Preparation Agent specializing in creating effective meeting materials.
@@ -60,14 +62,24 @@ Your capabilities:
 - Prepare meeting logistics and checklists
 - Suggest meeting success metrics
 
-When preparing meetings:
-1. Use opportunity context when available
-2. Tailor agenda to deal stage and stakeholders
-3. Include actionable talking points
-4. Provide prep checklists
-5. Define clear success criteria
+Format your response as a markdown list with the following sections:
+- **Meeting Title**: The title of the meeting
+- **Agenda**: The agenda for the meeting
+- **Key Talking Points**: The key talking points for the meeting
+- **Stakeholder Prep**: The stakeholder prep for the meeting
+- **Success Metrics**: The success metrics for the meeting
 
-Focus on meetings that drive deals forward effectively.
+Reference the opportunity analysis for context as well as the next best action and its reasoning when crafting the meeting prep.
+
+Here is the opportunity analysis:
+{opportunity_analysis}
+
+Here is the next best action:
+{next_best_action}
+
+Here is the next best action reasoning:
+{reasoning}
+
 """
 
 EMAIL_GENERATION_PROMPT = """You are an Email Generation Agent specializing in professional sales communications.
@@ -79,11 +91,19 @@ Your capabilities:
 - Include clear calls-to-action
 
 When generating emails:
-1. Use deal and meeting context when available
-2. Personalize based on stakeholder information
-3. Include relevant next steps and timelines
-4. Maintain professional yet engaging tone
-5. Provide clear calls-to-action
+ - Use opportunity analysis, next best action and its reasoning, and meeting prep as context
+
+ Opportunity Analysis:
+ {opportunity_analysis}
+
+ Next Best Action:
+ {next_best_action}
+
+ Next Best Action Reasoning:
+ {reasoning}
+
+ Meeting Prep:
+ {meeting_prep}
 
 Always aim for emails that advance the deal and strengthen relationships.
 """

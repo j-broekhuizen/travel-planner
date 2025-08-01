@@ -6,3 +6,5 @@ CLAUDE.md
 testing/
 .venv/
 .langgraph_api/
+*.ipynb
+test.md
