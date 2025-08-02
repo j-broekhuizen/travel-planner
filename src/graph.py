@@ -1,8 +1,5 @@
-from typing import Annotated
-from langchain_core.tools import tool
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-from langgraph.prebuilt import create_react_agent, InjectedState
-from langgraph.graph import StateGraph, MessagesState, START, END
+from langchain_core.messages import SystemMessage
+from langgraph.graph import StateGraph, START, END
 from langgraph.types import Command
 from src.model import model
 from src.subagents.opportunity_analysis import opportunity_analysis_agent
@@ -54,7 +51,16 @@ def create_deal_engine(checkpointer):
     builder = StateGraph(DealEngineState)
 
     # Add router
-    builder.add_node("deal_engine_router", router)
+    builder.add_node(
+        "deal_engine_router",
+        router,
+        destinations=[
+            "opportunity_analysis_agent",
+            "next_best_action_agent",
+            "meeting_preparation_agent",
+            "email_generation_agent",
+        ],
+    )
 
     # Add specialized agents
     builder.add_node("opportunity_analysis_agent", opportunity_analysis_agent)
