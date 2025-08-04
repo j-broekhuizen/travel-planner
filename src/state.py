@@ -1,7 +1,6 @@
-from typing import Annotated, Dict, List, Literal, Optional
-from typing_extensions import TypedDict, NotRequired
+from typing import Annotated, List
+from typing_extensions import TypedDict
 from langgraph.graph.message import AnyMessage, add_messages
-from src.model import Opportunity
 
 
 def add_routing_reasoning(
