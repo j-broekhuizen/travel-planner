@@ -26,7 +26,6 @@ async def tool_handler(state: DealEngineState):
             {"role": "tool", "content": observation, "tool_call_id": tool_call["id"]}
         )
 
-    # Add it to our messages
     return {"messages": result}
 
 

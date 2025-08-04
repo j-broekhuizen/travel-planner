@@ -9,19 +9,3 @@ class DealEngineState(TypedDict):
 
     messages: Annotated[list[AnyMessage], add_messages]
     routing_reasoning: NotRequired[Optional[Dict[str, str]]]
-
-    # # Opportunity data
-    # opportunity_id: NotRequired[Optional[str]]
-    # opportunity_data: NotRequired[Optional[Opportunity]]
-    # opportunity_analysis: NotRequired[Optional[str]]
-
-    # # Next best actions
-    # next_best_actions: NotRequired[Optional[list[str]]]
-    # best_action: NotRequired[Optional[str]]
-    # reasoning: NotRequired[Optional[str]]
-
-    # # Meeting preparation
-    # meeting_prep_doc: NotRequired[Optional[str]]
-
-    # # Email generation
-    # email_content: NotRequired[Optional[str]]

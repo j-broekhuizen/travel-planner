@@ -3,6 +3,8 @@ from datetime import datetime
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
+
+# Add your LangChain Chat Model Here
 model = ChatOpenAI(model="gpt-4.1")
 
 
@@ -13,7 +15,5 @@ class Opportunity(BaseModel):
     account_name: str
     description: str
     deal_value: float
-    stage: int  # Changed from str to int to match database
+    stage: int
     close_date: Optional[datetime] = None
-
-
