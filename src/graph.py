@@ -34,14 +34,19 @@ async def router(state: DealEngineState):
     user_message = state["messages"][-1].content
     messages = [SystemMessage(content=ROUTER_PROMPT)] + state["messages"]
     response = await router_model.ainvoke(messages)
+    new_reasoning = {
+        "user_message": user_message,
+        "reasoning": response.reasoning,
+        "routing_decision": response.routing_decision,
+    }
+    # Only add if not a duplicate of the last entry
+    existing = state.get("routing_reasoning", [])
+    if existing and existing[-1] == new_reasoning:
+        # Don't add duplicate
+        return Command(goto=response.routing_decision)
     return Command(
         goto=response.routing_decision,
-        update={
-            "routing_reasoning": {
-                "user_message": user_message,
-                "reasoning": response.reasoning,
-            },
-        },
+        update={"routing_reasoning": new_reasoning},
     )
 
 
