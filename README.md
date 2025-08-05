@@ -1,7 +1,7 @@
 
 ## Overview
 
-The Deal Engine uses a router-based architecture to intelligently route user requests to specialized AI agents:
+The Deal Engine uses a supervisor-based architecture to intelligently coordinate and route user requests across specialized AI agents:
 
 - **Opportunity Analysis Agent**: Analyzes deal/opty data and provides insights
 - **Next Best Action Agent**: Recommends optimal next steps for deals
@@ -11,14 +11,15 @@ The Deal Engine uses a router-based architecture to intelligently route user req
 ## Architecture
 
 ```
-User Input → Router → Specialized Agent → Response
+User Input → Supervisor → Specialized Agent → Supervisor → Response
 ```
 
-Each agent uses a routing pattern with tool integration, allowing for:
-- Dynamic tool execution
-- Multi-step conversations
-- Message-based state management
-- Conditional routing between tool handling and AI processing
+The supervisor orchestrates intelligent delegation and coordination, enabling:
+- Multi-agent collaboration and context sharing
+- Dynamic tool execution across specialized domains
+- Comprehensive response synthesis from multiple agents
+- Intelligent routing based on request analysis and conversation history
+- Quality control and fallback handling
 
 ## Quick Start
 
@@ -82,7 +83,7 @@ The deal engine will be available at the configured endpoint.
 ```
 deal-engine/
 ├── src/
-│   ├── graph.py              # Main router and graph definition
+│   ├── graph.py              # Main supervisor and graph definition
 │   ├── state.py              # Shared state management
 │   ├── model.py             # AI model and data models
 │   ├── prompts.py           # AI prompts and templates
