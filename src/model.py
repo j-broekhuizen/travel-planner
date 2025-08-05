@@ -4,7 +4,7 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
 
-model = ChatOpenAI(model="gpt-4.1")
+model = ChatOpenAI(model="o3-mini")
 
 
 class Opportunity(BaseModel):

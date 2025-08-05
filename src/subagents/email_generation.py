@@ -67,4 +67,4 @@ graph.add_conditional_edges(
 graph.add_edge(START, "llm")
 graph.add_edge("tool_handler", "llm")
 
-email_generation_agent = graph.compile()
+email_generation_agent = graph.compile(name="email_generation_agent")

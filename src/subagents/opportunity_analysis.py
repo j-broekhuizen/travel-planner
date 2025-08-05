@@ -70,4 +70,4 @@ graph.add_conditional_edges(
 graph.add_edge(START, "llm")
 graph.add_edge("tool_handler", "llm")
 
-opportunity_analysis_agent = graph.compile()
+opportunity_analysis_agent = graph.compile(name="opportunity_analysis_agent")

@@ -1,52 +1,50 @@
-from langchain_core.messages import SystemMessage
 from langgraph.graph import StateGraph, START, END
-from langgraph.types import Command
 from src.model import model
 from src.subagents.opportunity_analysis import opportunity_analysis_agent
 from src.subagents.next_best_action import next_best_action_agent
 from src.subagents.meeting_preparation import meeting_preparation_agent
 from src.subagents.email_generation import email_generation_agent
 from src.state import DealEngineState
-from src.prompts import ROUTER_PROMPT
-from pydantic import BaseModel, Field
-from typing import Literal
+from langgraph.prebuilt import create_react_agent
+from src.tools import create_handoff_tool
+from src.prompts import (
+    OPPORTUNITY_ANALYSIS_TOOL_DESCRIPTION,
+    NEXT_BEST_ACTION_TOOL_DESCRIPTION,
+    MEETING_PREPARATION_TOOL_DESCRIPTION,
+    EMAIL_GENERATION_TOOL_DESCRIPTION,
+    SUPERVISOR_PROMPT,
+)
 
 
-class DealEngineRouter(BaseModel):
-    """A router for the deal engine."""
+def create_supervisor(checkpointer):
+    """Create the supervisor agent."""
 
-    reasoning: str = Field(
-        description="Step-by-step reasoning behind the routing decision."
+    opportunity_handoff_tool = create_handoff_tool(
+        "opportunity_analysis_agent", OPPORTUNITY_ANALYSIS_TOOL_DESCRIPTION
     )
-    routing_decision: Literal[
-        "opportunity_analysis_agent",
-        "next_best_action_agent",
-        "meeting_preparation_agent",
-        "email_generation_agent",
-    ] = Field(description="The agent to route the user's request to.")
+    next_best_action_handoff_tool = create_handoff_tool(
+        "next_best_action_agent", NEXT_BEST_ACTION_TOOL_DESCRIPTION
+    )
+    meeting_preparation_handoff_tool = create_handoff_tool(
+        "meeting_preparation_agent", MEETING_PREPARATION_TOOL_DESCRIPTION
+    )
+    email_generation_handoff_tool = create_handoff_tool(
+        "email_generation_agent", EMAIL_GENERATION_TOOL_DESCRIPTION
+    )
 
-
-router_model = model.with_structured_output(DealEngineRouter)
-
-
-async def router(state: DealEngineState):
-    """Route the user's request to the appropriate agent."""
-    user_message = state["messages"][-1].content
-    messages = [SystemMessage(content=ROUTER_PROMPT)] + state["messages"]
-    response = await router_model.ainvoke(messages)
-    new_reasoning = {
-        "user_message": user_message,
-        "reasoning": response.reasoning,
-        "routing_decision": response.routing_decision,
-    }
-    # Only add if not a duplicate of the last entry
-    existing = state.get("routing_reasoning", [])
-    if existing and existing[-1] == new_reasoning:
-        # Don't add duplicate
-        return Command(goto=response.routing_decision)
-    return Command(
-        goto=response.routing_decision,
-        update={"routing_reasoning": new_reasoning},
+    supervisor_tools = [
+        opportunity_handoff_tool,
+        next_best_action_handoff_tool,
+        meeting_preparation_handoff_tool,
+        email_generation_handoff_tool,
+    ]
+    return create_react_agent(
+        name="supervisor",
+        model=model,
+        tools=supervisor_tools,
+        prompt=SUPERVISOR_PROMPT,
+        state_schema=DealEngineState,
+        checkpointer=checkpointer,
     )
 
 
@@ -55,31 +53,29 @@ def create_deal_engine(checkpointer):
 
     builder = StateGraph(DealEngineState)
 
-    # Add router
+    supervisor = create_supervisor(checkpointer)
+
     builder.add_node(
-        "deal_engine_router",
-        router,
-        destinations=[
+        "supervisor",
+        supervisor,
+        destinations=(
             "opportunity_analysis_agent",
             "next_best_action_agent",
             "meeting_preparation_agent",
             "email_generation_agent",
-        ],
+            END,
+        ),
     )
-
-    # Add specialized agents
     builder.add_node("opportunity_analysis_agent", opportunity_analysis_agent)
     builder.add_node("next_best_action_agent", next_best_action_agent)
     builder.add_node("meeting_preparation_agent", meeting_preparation_agent)
     builder.add_node("email_generation_agent", email_generation_agent)
 
-    # Define flow - start with router
-    builder.add_edge(START, "deal_engine_router")
+    builder.add_edge(START, "supervisor")
 
-    # All agents return to END for continued orchestration
-    builder.add_edge("opportunity_analysis_agent", END)
-    builder.add_edge("next_best_action_agent", END)
-    builder.add_edge("meeting_preparation_agent", END)
-    builder.add_edge("email_generation_agent", END)
+    builder.add_edge("opportunity_analysis_agent", "supervisor")
+    builder.add_edge("next_best_action_agent", "supervisor")
+    builder.add_edge("meeting_preparation_agent", "supervisor")
+    builder.add_edge("email_generation_agent", "supervisor")
 
     return builder.compile(checkpointer=checkpointer)

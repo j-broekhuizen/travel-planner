@@ -66,4 +66,4 @@ graph.add_conditional_edges(
 graph.add_edge(START, "llm")
 graph.add_edge("tool_handler", "llm")
 
-next_best_action_agent = graph.compile()
+next_best_action_agent = graph.compile(name="next_best_action_agent")
