@@ -1,4 +1,4 @@
-import sqlite3
+import aiosqlite
 import re
 from typing import Annotated, Optional, Dict, Any, List
 from datetime import datetime
@@ -6,12 +6,11 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 from src.model import Opportunity
-from src.state import DealEngineState
 from langchain_core.messages import ToolMessage, SystemMessage, HumanMessage
-from langgraph_supervisor.handoff import METADATA_KEY_HANDOFF_DESTINATION
 from langgraph.graph import MessagesState
 from langchain_core.tools import InjectedToolCallId
 from src.model import model
+from langgraph_supervisor.handoff import METADATA_KEY_HANDOFF_DESTINATION
 
 DB_PATH = "src/db/opportunities.db"
 
@@ -70,7 +69,7 @@ def create_handoff_tool(agent_name: str, description: str):
 
 
 @tool("get_opportunity", description="Fetch opportunity by ID")
-def get_opportunity(opportunity_id: str) -> Optional[Opportunity]:
+async def get_opportunity(opportunity_id: str) -> Optional[Opportunity]:
     """
     Fetch opportunity by ID
 
@@ -80,16 +79,16 @@ def get_opportunity(opportunity_id: str) -> Optional[Opportunity]:
     Returns:
         Opportunity object if found, None otherwise
     """
-    with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute(
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cursor = await conn.cursor()
+        await cursor.execute(
             """
             SELECT * FROM opportunities WHERE id = ?
         """,
             (opportunity_id,),
         )
 
-        row = cursor.fetchone()
+        row = await cursor.fetchone()
         if not row:
             return None
 
@@ -104,7 +103,7 @@ def get_opportunity(opportunity_id: str) -> Optional[Opportunity]:
 
 
 @tool("list_opportunities", description="List all opportunities")
-def list_opportunities(limit: int = 10) -> List[Opportunity]:
+async def list_opportunities(limit: int = 10) -> List[Opportunity]:
     """
     List all opportunities and return as a string
 
@@ -114,12 +113,13 @@ def list_opportunities(limit: int = 10) -> List[Opportunity]:
     Returns:
         String representation of all opportunities
     """
-    with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM opportunities LIMIT ?", (limit,))
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cursor = await conn.cursor()
+        await cursor.execute("SELECT * FROM opportunities LIMIT ?", (limit,))
 
         opportunities = []
-        for row in cursor.fetchall():
+        rows = await cursor.fetchall()
+        for row in rows:
             opportunities.append(
                 Opportunity(
                     opportunity_id=row[0],
@@ -137,7 +137,7 @@ def list_opportunities(limit: int = 10) -> List[Opportunity]:
 
 
 @tool("extract_opportunity_id", description="Extract opportunity ID from text")
-def extract_opportunity_id(text: str) -> Optional[str]:
+async def extract_opportunity_id(text: str) -> Optional[str]:
     """
     Extract opportunity ID from text using regex
 

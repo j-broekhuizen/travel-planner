@@ -19,11 +19,16 @@ async def tool_handler(state: DealEngineState):
     for tool_call in state["messages"][-1].tool_calls:
         # Get the tool
         tool = tools_by_name[tool_call["name"]]
-        # Run it
-        observation = tool.invoke(tool_call["args"])
+        # Run it async
+        observation = await tool.ainvoke(tool_call["args"])
         # Create a tool message
         result.append(
-            {"role": "tool", "content": observation, "tool_call_id": tool_call["id"]}
+            {
+                "role": "tool",
+                "content": observation,
+                "name": tool_call["name"],
+                "tool_call_id": tool_call["id"],
+            }
         )
 
     # Add it to our messages

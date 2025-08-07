@@ -1,7 +1,9 @@
 {
-  "dependencies": ["."],
+  "dependencies": [
+    "."
+  ],
   "graphs": {
-    "deal_engine": "./src/graph.py:deal_engine"
+    "deal_engine": "./src/graph.py:create_deal_engine"
   },
   "env": ".env"
 }

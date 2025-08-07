@@ -10,3 +10,5 @@ pandas
 numpy
 python-dotenv
 langgraph-supervisor
+aiosqlite
+ipykernel

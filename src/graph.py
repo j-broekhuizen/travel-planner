@@ -38,6 +38,7 @@ supervisor_tools = [
     meeting_preparation_handoff_tool,
     email_generation_handoff_tool,
 ]
+
 tools_by_name = {tool.name: tool for tool in supervisor_tools}
 model_with_tools = model.bind_tools(supervisor_tools)
 
