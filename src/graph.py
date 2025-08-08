@@ -44,10 +44,20 @@ async def supervisor_tools_node(state: DealEngineState):
                     scope_text = f"Analyze opportunity {args['opportunity_id']}. Context: {scope_text}"
                 input = {"messages": [HumanMessage(content=scope_text)]}
                 subagent_output = await opportunity_analysis_agent.ainvoke(input)
-            else:
+            elif name == "GenerateEmail":
                 scope_text = args.get("instruction")
                 input = {"messages": [HumanMessage(content=scope_text)]}
                 subagent_output = await email_generation_agent.ainvoke(input)
+            elif name == "NextBestAction":
+                scope_text = args.get("instruction")
+                input = {"messages": [HumanMessage(content=scope_text)]}
+                subagent_output = await next_best_action_agent.ainvoke(input)
+            elif name == "PrepareMeeting":
+                scope_text = args.get("instruction")
+                input = {"messages": [HumanMessage(content=scope_text)]}
+                subagent_output = await meeting_preparation_agent.ainvoke(input)
+            else:
+                raise ValueError(f"Unknown tool: {name}")
 
             # Extract final content: take the content of the last AI message from the subagent
             content = ""
