@@ -38,6 +38,7 @@ async def tool_handler(state: DealEngineState):
 
 async def llm(state: DealEngineState):
     messages = state["messages"]
+    print(f"Opportunity Analysis Agent State: {messages}")
     messages_with_system = [
         SystemMessage(content=OPPORTUNITY_ANALYSIS_PROMPT)
     ] + messages

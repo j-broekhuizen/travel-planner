@@ -3,6 +3,7 @@ import re
 from typing import Annotated, Optional, Dict, Any, List
 from datetime import datetime
 from langchain_core.tools import tool
+from pydantic import BaseModel, Field
 from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 from src.model import Opportunity
@@ -16,6 +17,43 @@ DB_PATH = "src/db/opportunities.db"
 
 ## SUPERVISOR TOOLS
 ## ----------------------------------------------------------------------------
+
+
+class AnalyzeOpportunity(BaseModel):
+    """Analyze an opportunity. Provide an ID or free-text instruction with context."""
+
+    opportunity_id: Optional[str] = Field(
+        default=None,
+        description="The opportunity id to analyze (e.g., OPTY12345).",
+    )
+    instruction: Optional[str] = Field(
+        default=None,
+        description="Additional guidance or context for the analysis.",
+    )
+
+
+class GenerateEmail(BaseModel):
+    """Generate an email per the given instruction (tone, recipient, purpose)."""
+
+    instruction: str = Field(
+        description="What email to draft, including recipient and purpose.",
+    )
+
+
+class NextBestAction(BaseModel):
+    """Suggest the next best action for an opportunity or account."""
+
+    instruction: str = Field(
+        description="Context and goal for the next best action recommendation.",
+    )
+
+
+class PrepareMeeting(BaseModel):
+    """Prepare a meeting brief/checklist for an upcoming meeting."""
+
+    instruction: str = Field(
+        description="Meeting context (who, when, objectives) and any constraints.",
+    )
 
 
 def create_handoff_tool(agent_name: str, description: str):

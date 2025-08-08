@@ -1,12 +1,17 @@
 from langgraph.graph import StateGraph, START, END
-from langgraph.types import Command
+from langgraph.types import Command, Send
 from src.model import model
 from src.subagents.opportunity_analysis import opportunity_analysis_agent
 from src.subagents.next_best_action import next_best_action_agent
 from src.subagents.meeting_preparation import meeting_preparation_agent
 from src.subagents.email_generation import email_generation_agent
 from src.state import DealEngineState
-from src.tools import create_handoff_tool
+from src.tools import (
+    AnalyzeOpportunity,
+    GenerateEmail,
+    NextBestAction,
+    PrepareMeeting,
+)
 from src.prompts import (
     OPPORTUNITY_ANALYSIS_TOOL_DESCRIPTION,
     NEXT_BEST_ACTION_TOOL_DESCRIPTION,
@@ -15,90 +20,110 @@ from src.prompts import (
     SUPERVISOR_PROMPT,
 )
 from typing import Literal
-from langchain_core.messages import SystemMessage, ToolMessage
+from langchain_core.messages import SystemMessage, ToolMessage, AIMessage, HumanMessage
+from uuid import uuid4
+import asyncio
 
 
-# Create supervisor tools
-opportunity_handoff_tool = create_handoff_tool(
-    "opportunity_analysis_agent", OPPORTUNITY_ANALYSIS_TOOL_DESCRIPTION
-)
-next_best_action_handoff_tool = create_handoff_tool(
-    "next_best_action_agent", NEXT_BEST_ACTION_TOOL_DESCRIPTION
-)
-meeting_preparation_handoff_tool = create_handoff_tool(
-    "meeting_preparation_agent", MEETING_PREPARATION_TOOL_DESCRIPTION
-)
-email_generation_handoff_tool = create_handoff_tool(
-    "email_generation_agent", EMAIL_GENERATION_TOOL_DESCRIPTION
-)
-
-supervisor_tools = [
-    opportunity_handoff_tool,
-    next_best_action_handoff_tool,
-    meeting_preparation_handoff_tool,
-    email_generation_handoff_tool,
-]
-
-tools_by_name = {tool.name: tool for tool in supervisor_tools}
+"""Supervisor binds Pydantic schema tools. Execution happens in supervisor_tools node."""
+supervisor_tools = [AnalyzeOpportunity, NextBestAction, PrepareMeeting, GenerateEmail]
 model_with_tools = model.bind_tools(supervisor_tools)
 
 
-async def supervisor_tool_handler(state: DealEngineState):
-    """Handle supervisor tool calls for agent handoffs."""
+async def supervisor_tools_node(state: DealEngineState):
+    """Execute delegate tools by invoking subagent subgraphs in parallel and returning ToolMessages."""
 
-    # Get the last message with tool calls
-    last_message = state["messages"][-1]
+    messages = state["messages"]
+    last_message = messages[-1]
+    if not getattr(last_message, "tool_calls", None):
+        return Command(goto=END)
 
-    # Handle each tool call
-    for tool_call in last_message.tool_calls:
-        tool_name = tool_call["name"]
+    # Helper to get last human text for fallback context
+    def last_human_text(msgs):
+        for m in reversed(msgs):
+            if (
+                getattr(m, "type", None) == "human"
+                or m.__class__.__name__ == "HumanMessage"
+            ):
+                return m.content
+        return ""
 
-        # Create tool message for the handoff
-        tool_message = ToolMessage(
-            content=f"Successfully transferred your request to {tool_name.replace('transfer_to_', '').replace('_', ' ').title()}.",
-            name=tool_name,
-            tool_call_id=tool_call["id"],
-        )
+    original_human = last_human_text(messages)
 
-        # Determine which agent to route to based on tool name
-        if "opportunity_analysis" in tool_name:
-            agent_name = "opportunity_analysis_agent"
-        elif "next_best_action" in tool_name:
-            agent_name = "next_best_action_agent"
-        elif "meeting_preparation" in tool_name:
-            agent_name = "meeting_preparation_agent"
-        elif "email_generation" in tool_name:
-            agent_name = "email_generation_agent"
-        else:
-            # Fallback - shouldn't happen
-            agent_name = END
+    # Build async tasks for each tool call
+    async def run_tool(tool_call):
+        name = tool_call["name"]
+        args = tool_call.get("args", {})
 
-        # Return Command to transfer to the appropriate agent
-        return Command(
-            goto=agent_name,
-            update={
-                "messages": state["messages"] + [tool_message],
-            },
-            graph=Command.PARENT,
-        )
+        # Map tool name to subagent invocation with scoped HumanMessage
+        try:
+            if name == "AnalyzeOpportunity":
+                scope_text = args.get("instruction") or original_human
+                if args.get("opportunity_id"):
+                    scope_text = f"Analyze opportunity {args['opportunity_id']}. Context: {scope_text}"
+                oa_input = {"messages": [HumanMessage(content=scope_text)]}
+                observation = await opportunity_analysis_agent.ainvoke(oa_input)
+            elif name == "GenerateEmail":
+                scope_text = args.get("instruction") or original_human
+                eg_input = {"messages": [HumanMessage(content=scope_text)]}
+                observation = await email_generation_agent.ainvoke(eg_input)
+            elif name == "NextBestAction":
+                scope_text = args.get("instruction") or original_human
+                nba_input = {"messages": [HumanMessage(content=scope_text)]}
+                observation = await next_best_action_agent.ainvoke(nba_input)
+            elif name == "PrepareMeeting":
+                scope_text = args.get("instruction") or original_human
+                mp_input = {"messages": [HumanMessage(content=scope_text)]}
+                observation = await meeting_preparation_agent.ainvoke(mp_input)
+            else:
+                return ToolMessage(
+                    content=f"Unknown tool '{name}'.",
+                    name=name,
+                    tool_call_id=tool_call["id"],
+                )
 
-    # If no tool calls (shouldn't happen), return state unchanged
-    return {"messages": []}
+            # Extract final content: take the content of the last AI message from the subagent
+            content = ""
+            if isinstance(observation, dict) and "messages" in observation:
+                for m in reversed(observation["messages"]):
+                    if (
+                        getattr(m, "type", None) == "ai"
+                        or m.__class__.__name__ == "AIMessage"
+                    ):
+                        content = str(m.content)
+                        break
+
+            return ToolMessage(
+                content=content or "No result produced.",
+                name=name,
+                tool_call_id=tool_call["id"],
+            )
+        except Exception as e:
+            return ToolMessage(
+                content=f"Error executing {name}: {e}",
+                name=name,
+                tool_call_id=tool_call["id"],
+            )
+
+    tasks = [run_tool(tc) for tc in last_message.tool_calls]
+    results = await asyncio.gather(*tasks)
+
+    return Command(goto="supervisor_llm", update={"messages": results})
 
 
 async def supervisor_llm(state: DealEngineState):
     """Supervisor LLM node for routing and coordination."""
 
     messages = state["messages"]
+    print(f"Supervisor LLM State: {messages}")
     messages_with_system = [SystemMessage(content=SUPERVISOR_PROMPT)] + messages
-
     response = await model_with_tools.ainvoke(messages_with_system)
     return Command(update={"messages": [response]})
 
 
 def supervisor_should_continue(
     state: DealEngineState,
-) -> Literal["supervisor_tool_handler", "__end__"]:
+) -> Literal["supervisor_tools_node", "__end__"]:
     """Route to tool handler for handoffs, or end if no tool calls."""
 
     # Get the last message
@@ -108,7 +133,7 @@ def supervisor_should_continue(
     if not last_message.tool_calls:
         return END
     else:
-        return "supervisor_tool_handler"
+        return "supervisor_tools_node"
 
 
 def create_supervisor(checkpointer):
@@ -117,19 +142,19 @@ def create_supervisor(checkpointer):
     # Build the supervisor graph
     supervisor_graph = StateGraph(DealEngineState)
     supervisor_graph.add_node("supervisor_llm", supervisor_llm)
-    supervisor_graph.add_node("supervisor_tool_handler", supervisor_tool_handler)
+    supervisor_graph.add_node("supervisor_tools_node", supervisor_tools_node)
 
     supervisor_graph.add_conditional_edges(
         "supervisor_llm",
         supervisor_should_continue,
         {
-            "supervisor_tool_handler": "supervisor_tool_handler",
+            "supervisor_tools_node": "supervisor_tools_node",
             "__end__": END,
         },
     )
 
     supervisor_graph.add_edge(START, "supervisor_llm")
-    supervisor_graph.add_edge("supervisor_tool_handler", "supervisor_llm")
+    supervisor_graph.add_edge("supervisor_tools_node", "supervisor_llm")
 
     return supervisor_graph.compile(name="supervisor", checkpointer=checkpointer)
 

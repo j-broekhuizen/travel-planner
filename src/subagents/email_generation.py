@@ -37,6 +37,7 @@ async def tool_handler(state: DealEngineState):
 
 async def llm(state: DealEngineState):
     messages = state["messages"]
+    print(f"Email Agent State: {messages}")
     messages_with_system = [SystemMessage(content=EMAIL_GENERATION_PROMPT)] + messages
     response = await model.ainvoke(messages_with_system)
     return Command(update={"messages": [response]})
