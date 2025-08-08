@@ -4,14 +4,8 @@ from typing import Annotated, Optional, Dict, Any, List
 from datetime import datetime
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
-from langgraph.prebuilt import InjectedState
-from langgraph.types import Command
 from src.model import Opportunity
-from langchain_core.messages import ToolMessage, SystemMessage, HumanMessage
-from langgraph.graph import MessagesState
-from langchain_core.tools import InjectedToolCallId
 from src.model import model
-from langgraph_supervisor.handoff import METADATA_KEY_HANDOFF_DESTINATION
 
 DB_PATH = "src/db/opportunities.db"
 
@@ -24,11 +18,18 @@ class AnalyzeOpportunity(BaseModel):
 
     opportunity_id: Optional[str] = Field(
         default=None,
-        description="The opportunity id to analyze (e.g., OPTY12345).",
+        description=(
+            "Optional CRM opportunity ID (e.g., OPTY12345). If provided, the agent will use it to "
+            "retrieve the record; if omitted, the agent will attempt to infer or extract an ID from "
+            "the instruction text."
+        ),
     )
     instruction: Optional[str] = Field(
         default=None,
-        description="Additional guidance or context for the analysis.",
+        description=(
+            "Optional natural-language guidance and context for the analysis (e.g., specific goals, "
+            "known risks, questions to answer, constraints, or focus areas)."
+        ),
     )
 
 
@@ -36,7 +37,11 @@ class GenerateEmail(BaseModel):
     """Generate an email per the given instruction (tone, recipient, purpose)."""
 
     instruction: str = Field(
-        description="What email to draft, including recipient and purpose.",
+        description=(
+            "Describe the email to draft, including recipient (name/role/title if known), relationship/context, "
+            "objective (e.g., follow-up, proposal, scheduling), desired tone/style, and any constraints or details "
+            "(e.g., word count, product references, opportunity ID)."
+        ),
     )
 
 
@@ -44,7 +49,11 @@ class NextBestAction(BaseModel):
     """Suggest the next best action for an opportunity or account."""
 
     instruction: str = Field(
-        description="Context and goal for the next best action recommendation.",
+        description=(
+            "Provide deal/account context for action planning: current stage, key stakeholders and roles, "
+            "recent activity, blockers/risks, desired objectives, and any deadlines. The agent will return five "
+            "prioritized actions and one recommended action with reasoning."
+        ),
     )
 
 
@@ -52,61 +61,24 @@ class PrepareMeeting(BaseModel):
     """Prepare a meeting brief/checklist for an upcoming meeting."""
 
     instruction: str = Field(
-        description="Meeting context (who, when, objectives) and any constraints.",
+        description=(
+            "Provide meeting context to generate a brief and agenda: meeting type, attendees and roles, "
+            "date/time, objectives/success criteria, logistics/constraints, and relevant opportunity context."
+        ),
     )
-
-
-def create_handoff_tool(agent_name: str, description: str):
-    """
-    Creates a handoff tool that transfers control to a specific agent.
-
-    Args:
-        agent_name: The name of the agent to hand off to
-        description: Description of when to use this handoff
-
-    Returns:
-        A tool function that can be used by the supervisor
-    """
-    tool_name = f"transfer_to_{agent_name}"
-
-    @tool(tool_name, description=description)
-    def handoff_tool(
-        state: Annotated[MessagesState, InjectedState],
-        tool_call_id: Annotated[str, InjectedToolCallId],
-    ) -> Command:
-        """
-        Execute the handoff to the specified agent.
-
-        This function:
-        1. Creates a confirmation message
-        2. Returns a Command to navigate to the target agent
-        3. Passes along the current state
-        """
-        # Create a confirmation message for the handoff
-        tool_message = ToolMessage(
-            content=f"Successfully transferred your request to {agent_name.replace('_', ' ').title()}.",
-            name=tool_name,
-            tool_call_id=tool_call_id,
-        )
-
-        return Command(
-            goto=agent_name,  # Which agent to transfer to
-            update={
-                **state,
-                "messages": state["messages"] + [tool_message],
-            },  # Update state
-            graph=Command.PARENT,  # Work in the parent graph context
-        )
-
-    handoff_tool.metadata = {METADATA_KEY_HANDOFF_DESTINATION: agent_name}
-    return handoff_tool
 
 
 ## OPPORTUNITY ANALYSIS TOOLS
 ## ----------------------------------------------------------------------------
 
 
-@tool("get_opportunity", description="Fetch opportunity by ID")
+@tool(
+    "get_opportunity",
+    description=(
+        "Retrieve a single opportunity by its ID (e.g., OPTY12345), including account, description, "
+        "deal value, stage, and optional close_date. Returns None if no record is found."
+    ),
+)
 async def get_opportunity(opportunity_id: str) -> Optional[Opportunity]:
     """
     Fetch opportunity by ID
@@ -140,7 +112,13 @@ async def get_opportunity(opportunity_id: str) -> Optional[Opportunity]:
         )
 
 
-@tool("list_opportunities", description="List all opportunities")
+@tool(
+    "list_opportunities",
+    description=(
+        "List up to 'limit' opportunities from the database, returning a stringified list of Opportunity "
+        "objects (id, account, description, value, stage, close_date). Useful for browsing during analysis."
+    ),
+)
 async def list_opportunities(limit: int = 10) -> List[Opportunity]:
     """
     List all opportunities and return as a string
@@ -174,7 +152,13 @@ async def list_opportunities(limit: int = 10) -> List[Opportunity]:
         return str(opportunities)
 
 
-@tool("extract_opportunity_id", description="Extract opportunity ID from text")
+@tool(
+    "extract_opportunity_id",
+    description=(
+        "Parse free text and return a standardized opportunity ID if present (regex pattern: OPTY\\d{4,}). "
+        "Useful to normalize user input before database lookups."
+    ),
+)
 async def extract_opportunity_id(text: str) -> Optional[str]:
     """
     Extract opportunity ID from text using regex
@@ -188,15 +172,3 @@ async def extract_opportunity_id(text: str) -> Optional[str]:
     pattern = r"OPTY\d{4,}"
     match = re.search(pattern, text.upper())
     return match.group(0) if match else None
-
-
-# NEXT BEST ACTION TOOLS
-## ----------------------------------------------------------------------------
-
-
-# MEETING PREP TOOLS
-## ----------------------------------------------------------------------------
-
-
-# EMAIL GENERATION TOOLS
-## ----------------------------------------------------------------------------
