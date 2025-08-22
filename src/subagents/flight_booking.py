@@ -1,22 +1,22 @@
 from langgraph.types import Command
-from src.state import DealEngineState
-from src.tools import extract_opportunity_id, get_opportunity
+from src.state import TravelPlannerState
+from src.tools import search_flights
 from src.model import model
-from src.prompts import OPPORTUNITY_ANALYSIS_PROMPT
+from src.prompts import FLIGHT_BOOKING_PROMPT
 from langgraph.graph import StateGraph, START, END
 from typing import Literal
 from langchain_core.messages import SystemMessage
 
-opportunity_analysis_tools = [extract_opportunity_id, get_opportunity]
-tools_by_name = {tool.name: tool for tool in opportunity_analysis_tools}
-model_with_tools = model.bind_tools(opportunity_analysis_tools)
+flight_booking_tools = [search_flights]
+tools_by_name = {tool.name: tool for tool in flight_booking_tools}
+model_with_tools = model.bind_tools(flight_booking_tools)
 
 
-async def tool_handler(state: DealEngineState):
+async def tool_handler(state: TravelPlannerState):
     """
     Tool-calling node that extracts the arguments from the tool call and invokes the tool.
     Args:
-    - state: DealEngineState
+    - state: TravelPlannerState
     Returns:
     - Command: Command(update={"messages": result})
     """
@@ -38,16 +38,14 @@ async def tool_handler(state: DealEngineState):
     return {"messages": result}
 
 
-async def llm(state: DealEngineState):
+async def llm(state: TravelPlannerState):
     messages = state["messages"]
-    messages_with_system = [
-        SystemMessage(content=OPPORTUNITY_ANALYSIS_PROMPT)
-    ] + messages
+    messages_with_system = [SystemMessage(content=FLIGHT_BOOKING_PROMPT)] + messages
     response = await model_with_tools.ainvoke(messages_with_system)
     return Command(update={"messages": [response]})
 
 
-def should_continue(state: DealEngineState) -> Literal["tool_handler", "__end__"]:
+def should_continue(state: TravelPlannerState) -> Literal["tool_handler", "__end__"]:
     """Route to tool handler, or end if no more tool calls."""
 
     # Get the last message
@@ -61,7 +59,7 @@ def should_continue(state: DealEngineState) -> Literal["tool_handler", "__end__"
 
 
 # Build the graph
-graph = StateGraph(DealEngineState)
+graph = StateGraph(TravelPlannerState)
 graph.add_node("llm", llm)
 graph.add_node("tool_handler", tool_handler)
 
@@ -77,4 +75,4 @@ graph.add_conditional_edges(
 graph.add_edge(START, "llm")
 graph.add_edge("tool_handler", "llm")
 
-opportunity_analysis_agent = graph.compile(name="opportunity_analysis_agent")
+flight_booking_agent = graph.compile(name="flight_booking_agent")

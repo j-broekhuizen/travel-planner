@@ -1,17 +1,15 @@
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Command
 from src.model import model
-from src.subagents.opportunity_analysis import opportunity_analysis_agent
-from src.subagents.next_best_action import next_best_action_agent
-from src.subagents.meeting_preparation import meeting_preparation_agent
-from src.subagents.email_generation import email_generation_agent
-from src.state import DealEngineState
+from src.subagents.flight_booking import flight_booking_agent
+from src.subagents.hotel_booking import hotel_booking_agent
+from src.subagents.car_rental import car_rental_agent
+from src.state import TravelPlannerState
 from src.prompts import SUPERVISOR_PROMPT
 from src.tools import (
-    AnalyzeOpportunity,
-    GenerateEmail,
-    NextBestAction,
-    PrepareMeeting,
+    BookFlight,
+    BookHotel,
+    RentCar,
 )
 from typing import Literal
 from langchain_core.messages import SystemMessage, ToolMessage, HumanMessage
@@ -22,11 +20,11 @@ import asyncio
 Supervisor binds Pydantic schema tools. 
 These will be used to invoke the subagents as tools and pass an explicit instruction to the subagent as a HumanMessage.
 """
-supervisor_tools = [AnalyzeOpportunity, NextBestAction, PrepareMeeting, GenerateEmail]
+supervisor_tools = [BookFlight, BookHotel, RentCar]
 model_with_tools = model.bind_tools(supervisor_tools)
 
 
-async def supervisor_tools_node(state: DealEngineState):
+async def supervisor_tools_node(state: TravelPlannerState):
     """
     Execute delegate tools by invoking subagent subgraphs (optionally in parallel) and returning ToolMessages.
     """
@@ -43,24 +41,20 @@ async def supervisor_tools_node(state: DealEngineState):
 
         # Map tool name to subagent invocation with scoped HumanMessage
         try:
-            if name == "AnalyzeOpportunity":
+            if name == "BookFlight":
                 scope_text = args.get("instruction")
-                if args.get("opportunity_id"):
-                    scope_text = f"Analyze opportunity {args['opportunity_id']}. Context: {scope_text}"
+                if args.get("origin") and args.get("destination"):
+                    scope_text = f"Book flight from {args['origin']} to {args['destination']}. {scope_text}"
                 input = {"messages": [HumanMessage(content=scope_text)]}
-                subagent_output = await opportunity_analysis_agent.ainvoke(input)
-            elif name == "GenerateEmail":
-                scope_text = args.get("instruction")
-                input = {"messages": [HumanMessage(content=scope_text)]}
-                subagent_output = await email_generation_agent.ainvoke(input)
-            elif name == "NextBestAction":
+                subagent_output = await flight_booking_agent.ainvoke(input)
+            elif name == "BookHotel":
                 scope_text = args.get("instruction")
                 input = {"messages": [HumanMessage(content=scope_text)]}
-                subagent_output = await next_best_action_agent.ainvoke(input)
-            elif name == "PrepareMeeting":
+                subagent_output = await hotel_booking_agent.ainvoke(input)
+            elif name == "RentCar":
                 scope_text = args.get("instruction")
                 input = {"messages": [HumanMessage(content=scope_text)]}
-                subagent_output = await meeting_preparation_agent.ainvoke(input)
+                subagent_output = await car_rental_agent.ainvoke(input)
             else:
                 raise ValueError(f"Unknown tool: {name}")
 
@@ -93,7 +87,7 @@ async def supervisor_tools_node(state: DealEngineState):
     return Command(goto="supervisor_llm", update={"messages": results})
 
 
-async def supervisor_llm(state: DealEngineState):
+async def supervisor_llm(state: TravelPlannerState):
     """
     Supervisor LLM node that either generates tool calls to the subagents or responds to the user and ends the conversation.
     """
@@ -105,7 +99,7 @@ async def supervisor_llm(state: DealEngineState):
 
 
 def supervisor_should_continue(
-    state: DealEngineState,
+    state: TravelPlannerState,
 ) -> Literal["supervisor_tools_node", "__end__"]:
     """Route to tool handler for handoffs, or end if no tool calls."""
 
@@ -121,7 +115,7 @@ def supervisor_should_continue(
 def create_supervisor(checkpointer):
     """Create the top-level graph."""
 
-    supervisor_graph = StateGraph(DealEngineState)
+    supervisor_graph = StateGraph(TravelPlannerState)
     supervisor_graph.add_node("supervisor_llm", supervisor_llm)
     supervisor_graph.add_node("supervisor_tools_node", supervisor_tools_node)
 
@@ -140,32 +134,29 @@ def create_supervisor(checkpointer):
     return supervisor_graph.compile(name="supervisor", checkpointer=checkpointer)
 
 
-def create_deal_engine(checkpointer):
-    """Create the main deal engine graph"""
+def create_travel_planner(checkpointer):
+    """Create the main travel planner graph"""
 
-    builder = StateGraph(DealEngineState)
+    builder = StateGraph(TravelPlannerState)
     supervisor = create_supervisor(checkpointer)
 
     builder.add_node(
         "supervisor",
         supervisor,
         destinations=(
-            "opportunity_analysis_agent",
-            "next_best_action_agent",
-            "meeting_preparation_agent",
-            "email_generation_agent",
+            "flight_booking_agent",
+            "hotel_booking_agent",
+            "car_rental_agent",
             END,
         ),
     )
-    builder.add_node("opportunity_analysis_agent", opportunity_analysis_agent)
-    builder.add_node("next_best_action_agent", next_best_action_agent)
-    builder.add_node("meeting_preparation_agent", meeting_preparation_agent)
-    builder.add_node("email_generation_agent", email_generation_agent)
+    builder.add_node("flight_booking_agent", flight_booking_agent)
+    builder.add_node("hotel_booking_agent", hotel_booking_agent)
+    builder.add_node("car_rental_agent", car_rental_agent)
 
     builder.add_edge(START, "supervisor")
-    builder.add_edge("opportunity_analysis_agent", "supervisor")
-    builder.add_edge("next_best_action_agent", "supervisor")
-    builder.add_edge("meeting_preparation_agent", "supervisor")
-    builder.add_edge("email_generation_agent", "supervisor")
+    builder.add_edge("flight_booking_agent", "supervisor")
+    builder.add_edge("hotel_booking_agent", "supervisor")
+    builder.add_edge("car_rental_agent", "supervisor")
 
     return builder.compile(checkpointer=checkpointer)

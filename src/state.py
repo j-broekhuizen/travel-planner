@@ -4,7 +4,7 @@ from langgraph.graph.message import AnyMessage, add_messages
 from langgraph.prebuilt.chat_agent_executor import AgentState
 
 
-class DealEngineState(AgentState):
-    """State for the deal engine"""
+class TravelPlannerState(AgentState):
+    """State for the travel planner"""
 
     messages: Annotated[list[AnyMessage], add_messages]

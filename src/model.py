@@ -7,12 +7,22 @@ from pydantic import BaseModel
 model = ChatOpenAI(model="gpt-4.1")
 
 
-class Opportunity(BaseModel):
-    """Data model for deal opportunities"""
+class Destination(BaseModel):
+    """Data model for travel destinations"""
 
-    opportunity_id: str
-    account_name: str
+    destination_id: str
+    city: str
+    country: str
+    airport_code: str
     description: str
-    deal_value: float
-    stage: int
-    close_date: Optional[datetime] = None
+
+
+class TravelBooking(BaseModel):
+    """Data model for travel bookings"""
+
+    booking_id: str
+    destination: str
+    booking_type: str  # flight, hotel, car
+    details: str
+    price: float
+    booking_date: Optional[datetime] = None

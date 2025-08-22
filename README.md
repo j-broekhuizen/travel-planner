@@ -1,12 +1,11 @@
 
 ## Overview
 
-The Deal Engine uses a supervisor-based architecture to intelligently coordinate and route user requests across specialized AI agents:
+The Travel Planner uses a supervisor-based architecture to intelligently coordinate and route user requests across specialized AI agents:
 
-- **Opportunity Analysis Agent**: Analyzes deal/opty data and provides insights
-- **Next Best Action Agent**: Recommends optimal next steps for deals
-- **Meeting Preparation Agent**: Creates meeting agendas and preparation materials
-- **Email Generation Agent**: Crafts professional follow-up emails and communications
+- **Flight Booking Agent**: Searches and books flights, handles airline preferences and scheduling
+- **Hotel Booking Agent**: Finds and reserves accommodations based on preferences and budget
+- **Car Rental Agent**: Manages vehicle rentals, pickup/dropoff logistics, and transportation needs
 
 ## Architecture
 
@@ -16,10 +15,10 @@ User Input → Supervisor → Specialized Agent → Supervisor → Response
 
 The supervisor orchestrates intelligent delegation and coordination, enabling:
 - Multi-agent collaboration and context sharing
-- Dynamic tool execution across specialized domains
-- Comprehensive response synthesis from multiple agents
-- Intelligent routing based on request analysis and conversation history
-- Quality control and fallback handling
+- Dynamic tool execution across specialized travel domains
+- Comprehensive trip planning from multiple booking agents
+- Intelligent routing based on travel request analysis and conversation history
+- Quality control and booking coordination
 
 ## Quick Start
 
@@ -33,7 +32,7 @@ The supervisor orchestrates intelligent delegation and coordination, enabling:
 1. Clone the repository:
 ```bash
 git clone <repository-url>
-cd deal-engine
+cd travel-planner
 ```
 
 2. Install dependencies:
@@ -54,47 +53,46 @@ Start the LangGraph server:
 langgraph dev
 ```
 
-The deal engine will be available at the configured endpoint.
+The travel planner will be available at the configured endpoint.
 
 ## Usage Examples
 
-### Opportunity Analysis
+### Flight Booking
 ```
-"What's the status of deal OPTY1234?"
-```
-
-### Next Best Actions
-```
-"What should I do next with this opportunity?"
+"Find me flights from NYC to Paris for next week"
 ```
 
-### Meeting Preparation
+### Hotel Reservations
 ```
-"Generate a meeting prep document for this deal"
+"Book a hotel in downtown Paris for 3 nights"
 ```
 
-### Email Generation
+### Car Rental
 ```
-"Draft a follow-up email for the client"
+"I need a rental car in Paris for my trip"
+```
+
+### Complete Trip Planning
+```
+"Plan a 5-day trip to Paris including flights, hotel, and car rental"
 ```
 
 ## Project Structure
 
 ```
-deal-engine/
+travel-planner/
 ├── src/
 │   ├── graph.py              # Main supervisor and graph definition
 │   ├── state.py              # Shared state management
 │   ├── model.py             # AI model and data models
 │   ├── prompts.py           # AI prompts and templates
-│   ├── tools.py             # Database tools and utilities
+│   ├── tools.py             # Booking tools and utilities
 │   ├── subagents/           # Specialized agent implementations
-│   │   ├── opportunity_analysis.py
-│   │   ├── next_best_action.py
-│   │   ├── meeting_preparation.py
-│   │   └── email_generation.py
+│   │   ├── flight_booking.py
+│   │   ├── hotel_booking.py
+│   │   └── car_rental.py
 │   └── db/
-│       └── opportunities.db  # SQLite database with deal data
+│       └── travel_data.db    # SQLite database with travel options
 ├── requirements.txt
 ├── langgraph.json          # LangGraph configuration
 └── README.md
@@ -102,15 +100,24 @@ deal-engine/
 
 ## Database Schema
 
-The system uses a SQLite database with an `opportunities` table:
+The system uses a SQLite database with travel-related tables:
 
-| Column    | Type    | Description                   |
-| --------- | ------- | ----------------------------- |
-| id        | TEXT    | Opportunity ID (OPTYXXXX)     |
-| name      | TEXT    | Deal name/description         |
-| account   | TEXT    | Client account name           |
-| NNACV     | REAL    | Net New Annual Contract Value |
-| stage     | INTEGER | Deal stage (1-10)             |
-| CloseDate | TEXT    | Expected close date           |
+### Destinations Table
+| Column      | Type    | Description                |
+| ----------- | ------- | -------------------------- |
+| id          | TEXT    | Destination ID (DEST001)   |
+| city        | TEXT    | City name                  |
+| country     | TEXT    | Country name               |
+| airport_code| TEXT    | Primary airport code       |
+| description | TEXT    | Destination description    |
+
+### Sample Bookings Table  
+| Column     | Type    | Description              |
+| ---------- | ------- | ------------------------ |
+| id         | TEXT    | Booking ID (TRV001)      |
+| destination| TEXT    | Destination city         |
+| type       | TEXT    | flight/hotel/car         |
+| details    | TEXT    | Booking specifics        |
+| price      | REAL    | Price in USD             |
 
 

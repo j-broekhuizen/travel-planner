@@ -4,171 +4,198 @@ from typing import Annotated, Optional, Dict, Any, List
 from datetime import datetime
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
-from src.model import Opportunity
+from src.model import Destination, TravelBooking
 from src.model import model
 
-DB_PATH = "src/db/opportunities.db"
+DB_PATH = "src/db/travel_data.db"
 
 ## SUPERVISOR TOOLS
 ## ----------------------------------------------------------------------------
 
 
-class AnalyzeOpportunity(BaseModel):
-    """Analyze an opportunity. Provide an ID or free-text instruction with context."""
+class BookFlight(BaseModel):
+    """Search and book flights based on travel requirements."""
 
-    opportunity_id: Optional[str] = Field(
+    origin: Optional[str] = Field(
         default=None,
         description=(
-            "Optional CRM opportunity ID (e.g., OPTY12345). If provided, the agent will use it to "
-            "retrieve the record; if omitted, the agent will attempt to infer or extract an ID from "
-            "the instruction text."
+            "Departure city, airport code, or location (e.g., 'NYC', 'JFK', 'New York'). If provided, the agent will use it to "
+            "search flights; if omitted, the agent will attempt to extract origin from the instruction text."
         ),
     )
-    instruction: Optional[str] = Field(
+    destination: Optional[str] = Field(
         default=None,
         description=(
-            "Optional natural-language guidance and context for the analysis (e.g., specific goals, "
-            "known risks, questions to answer, constraints, or focus areas)."
+            "Arrival city, airport code, or location (e.g., 'Paris', 'CDG', 'London'). If provided, the agent will use it to "
+            "search flights; if omitted, the agent will attempt to extract destination from the instruction text."
+        ),
+    )
+    instruction: str = Field(
+        description=(
+            "Natural-language flight booking request including dates, preferences, passenger count, "
+            "class preferences, airline preferences, budget constraints, and any special requirements."
         ),
     )
 
 
-class GenerateEmail(BaseModel):
-    """Generate an email per the given instruction (tone, recipient, purpose)."""
+class BookHotel(BaseModel):
+    """Search and book hotel accommodations based on travel requirements."""
 
     instruction: str = Field(
         description=(
-            "Describe the email to draft, including recipient (name/role/title if known), relationship/context, "
-            "objective (e.g., follow-up, proposal, scheduling), desired tone/style, and any constraints or details "
-            "(e.g., word count, product references, opportunity ID)."
+            "Describe the hotel booking request, including destination, check-in/check-out dates, guest count, "
+            "room preferences, amenities desired, budget range, location preferences (downtown, airport, etc.), "
+            "and any special requirements or accessibility needs."
         ),
     )
 
 
-class NextBestAction(BaseModel):
-    """Suggest the next best action for an opportunity or account."""
+class RentCar(BaseModel):
+    """Search and book rental cars based on transportation needs."""
 
     instruction: str = Field(
         description=(
-            "Provide deal/account context for action planning: current stage, key stakeholders and roles, "
-            "recent activity, blockers/risks, desired objectives, and any deadlines. The agent will return five "
-            "prioritized actions and one recommended action with reasoning."
+            "Provide car rental context including pickup/dropoff locations and dates, vehicle type preferences, "
+            "driver information, insurance needs, budget constraints, and any special equipment requirements. "
+            "Specify if pickup is at airport, hotel, or other location."
         ),
     )
-
-
-class PrepareMeeting(BaseModel):
-    """Prepare a meeting brief/checklist for an upcoming meeting."""
-
-    instruction: str = Field(
-        description=(
-            "Provide meeting context to generate a brief and agenda: meeting type, attendees and roles, "
-            "date/time, objectives/success criteria, logistics/constraints, and relevant opportunity context."
-        ),
-    )
-
-
-## OPPORTUNITY ANALYSIS TOOLS
-## ----------------------------------------------------------------------------
 
 
 @tool(
-    "get_opportunity",
+    "search_flights",
     description=(
-        "Retrieve a single opportunity by its ID (e.g., OPTY12345), including account, description, "
-        "deal value, stage, and optional close_date. Returns None if no record is found."
+        "Search for available flights by origin city and destination city. "
+        "Returns flight options with aircraft type and route information."
     ),
 )
-async def get_opportunity(opportunity_id: str) -> Optional[Opportunity]:
+async def search_flights(origin_city: str, destination_city: str) -> List[dict]:
     """
-    Fetch opportunity by ID
+    Search for flights between two cities
 
     Args:
-        opportunity_id: ID of the opportunity to fetch
+        origin_city: Departure city name
+        destination_city: Arrival city name
 
     Returns:
-        Opportunity object if found, None otherwise
+        List of flight options with details
     """
     async with aiosqlite.connect(DB_PATH) as conn:
         cursor = await conn.cursor()
+
+        # Query database for flights matching origin and destination
         await cursor.execute(
             """
-            SELECT * FROM opportunities WHERE id = ?
+            SELECT id, origin_city, destination_city, plane_type
+            FROM flights 
+            WHERE origin_city = ? AND destination_city = ?
         """,
-            (opportunity_id,),
+            (origin_city, destination_city),
         )
 
-        row = await cursor.fetchone()
-        if not row:
-            return None
+        rows = await cursor.fetchall()
 
-        return Opportunity(
-            opportunity_id=row[0],
-            account_name=row[1],
-            description=row[2],
-            deal_value=row[3],
-            stage=row[4],
-            close_date=datetime.strptime(row[5], "%m/%d/%Y") if row[5] else None,
-        )
+        flights = []
+        for row in rows:
+            flights.append(
+                {
+                    "flight_id": row[0],
+                    "origin_city": row[1],
+                    "destination_city": row[2],
+                    "plane_type": row[3],
+                }
+            )
+
+        return str(flights)
 
 
 @tool(
-    "list_opportunities",
+    "search_cars",
     description=(
-        "List up to 'limit' opportunities from the database, returning a stringified list of Opportunity "
-        "objects (id, account, description, value, stage, close_date). Useful for browsing during analysis."
+        "Search for available rental cars. If the user mentions a city, use that as the pickup city. "
+        "Returns car options with make and color information."
     ),
 )
-async def list_opportunities(limit: int = 10) -> List[Opportunity]:
+async def search_cars(pickup_city: str) -> List[dict]:
     """
-    List all opportunities and return as a string
+    Search for rental cars in a specific city
 
     Args:
-        limit: Number of opportunities to list (default: 10)
+        pickup_city: City where car will be picked up
 
     Returns:
-        String representation of all opportunities
+        List of car rental options with details
     """
     async with aiosqlite.connect(DB_PATH) as conn:
         cursor = await conn.cursor()
-        await cursor.execute("SELECT * FROM opportunities LIMIT ?", (limit,))
 
-        opportunities = []
+        # Query database for cars available in the pickup city
+        await cursor.execute(
+            """
+            SELECT id, pickup_city, make, color
+            FROM cars 
+            WHERE pickup_city = ?
+        """,
+            (pickup_city,),
+        )
+
         rows = await cursor.fetchall()
+
+        cars = []
         for row in rows:
-            opportunities.append(
-                Opportunity(
-                    opportunity_id=row[0],
-                    account_name=row[1],
-                    description=row[2],
-                    deal_value=row[3],
-                    stage=row[4],
-                    close_date=(
-                        datetime.strptime(row[5], "%m/%d/%Y") if row[5] else None
-                    ),
-                )
+            cars.append(
+                {
+                    "car_id": row[0],
+                    "pickup_city": row[1],
+                    "make": row[2],
+                    "color": row[3],
+                }
             )
 
-        return str(opportunities)
+        return str(cars)
 
 
 @tool(
-    "extract_opportunity_id",
+    "search_hotels",
     description=(
-        "Parse free text and return a standardized opportunity ID if present (regex pattern: OPTY\\d{4,}). "
-        "Useful to normalize user input before database lookups."
+        "Search for hotel accommodations by location city. "
+        "Returns hotel options with name and description information."
     ),
 )
-async def extract_opportunity_id(text: str) -> Optional[str]:
+async def search_hotels(location_city: str) -> List[dict]:
     """
-    Extract opportunity ID from text using regex
+    Search for hotels in a specific city
 
     Args:
-        text: Text to extract opportunity ID from
+        location_city: City where hotels are located
 
     Returns:
-        Opportunity ID if found, None otherwise
+        List of hotel options with details
     """
-    pattern = r"OPTY\d{4,}"
-    match = re.search(pattern, text.upper())
-    return match.group(0) if match else None
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cursor = await conn.cursor()
+
+        # Query database for hotels in the specified city
+        await cursor.execute(
+            """
+            SELECT id, location_city, name, description
+            FROM hotels 
+            WHERE location_city = ?
+        """,
+            (location_city,),
+        )
+
+        rows = await cursor.fetchall()
+
+        hotels = []
+        for row in rows:
+            hotels.append(
+                {
+                    "hotel_id": row[0],
+                    "location_city": row[1],
+                    "name": row[2],
+                    "description": row[3],
+                }
+            )
+
+        return str(hotels)

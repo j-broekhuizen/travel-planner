@@ -1,21 +1,22 @@
 from langgraph.types import Command
-from src.state import DealEngineState
+from src.state import TravelPlannerState
 from src.model import model
-from src.prompts import EMAIL_GENERATION_PROMPT
+from src.prompts import HOTEL_BOOKING_PROMPT
 from langgraph.graph import StateGraph, START, END
 from typing import Literal
 from langchain_core.messages import SystemMessage
+from src.tools import search_hotels
 
-email_generation_tools = []
-tools_by_name = {tool.name: tool for tool in email_generation_tools}
-model_with_tools = model.bind_tools(email_generation_tools)
+hotel_booking_tools = [search_hotels]
+tools_by_name = {tool.name: tool for tool in hotel_booking_tools}
+model_with_tools = model.bind_tools(hotel_booking_tools)
 
 
-async def tool_handler(state: DealEngineState):
+async def tool_handler(state: TravelPlannerState):
     """
     Tool-calling node that extracts the arguments from the tool call and invokes the tool.
     Args:
-    - state: DealEngineState
+    - state: TravelPlannerState
     Returns:
     - Command: Command(update={"messages": result})
     """
@@ -37,14 +38,14 @@ async def tool_handler(state: DealEngineState):
     return {"messages": result}
 
 
-async def llm(state: DealEngineState):
+async def llm(state: TravelPlannerState):
     messages = state["messages"]
-    messages_with_system = [SystemMessage(content=EMAIL_GENERATION_PROMPT)] + messages
+    messages_with_system = [SystemMessage(content=HOTEL_BOOKING_PROMPT)] + messages
     response = await model.ainvoke(messages_with_system)
     return Command(update={"messages": [response]})
 
 
-def should_continue(state: DealEngineState) -> Literal["tool_handler", "__end__"]:
+def should_continue(state: TravelPlannerState) -> Literal["tool_handler", "__end__"]:
     """Route to tool handler, or end if no more tool calls."""
 
     messages = state["messages"]
@@ -57,7 +58,7 @@ def should_continue(state: DealEngineState) -> Literal["tool_handler", "__end__"
 
 
 # Build the graph
-graph = StateGraph(DealEngineState)
+graph = StateGraph(TravelPlannerState)
 graph.add_node("llm", llm)
 graph.add_node("tool_handler", tool_handler)
 
@@ -73,4 +74,4 @@ graph.add_conditional_edges(
 graph.add_edge(START, "llm")
 graph.add_edge("tool_handler", "llm")
 
-email_generation_agent = graph.compile(name="email_generation_agent")
+hotel_booking_agent = graph.compile(name="hotel_booking_agent")
