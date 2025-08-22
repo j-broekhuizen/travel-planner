@@ -3,7 +3,7 @@ from datetime import datetime
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
-
+# Chat model
 model = ChatOpenAI(model="gpt-4.1")
 
 

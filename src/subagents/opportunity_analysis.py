@@ -13,16 +13,19 @@ model_with_tools = model.bind_tools(opportunity_analysis_tools)
 
 
 async def tool_handler(state: DealEngineState):
-    """Performs the tool call."""
+    """
+    Tool-calling node that extracts the arguments from the tool call and invokes the tool.
+    Args:
+    - state: DealEngineState
+    Returns:
+    - Command: Command(update={"messages": result})
+    """
 
     result = []
     # Iterate through tool calls
     for tool_call in state["messages"][-1].tool_calls:
-        # Get the tool
         tool = tools_by_name[tool_call["name"]]
-        # Run it async
         observation = await tool.ainvoke(tool_call["args"])
-        # Create a tool message
         result.append(
             {
                 "role": "tool",
@@ -32,7 +35,6 @@ async def tool_handler(state: DealEngineState):
             }
         )
 
-    # Add it to our messages
     return {"messages": result}
 
 

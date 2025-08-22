@@ -1,5 +1,5 @@
 from langgraph.graph import StateGraph, START, END
-from langgraph.types import Command, Send
+from langgraph.types import Command
 from src.model import model
 from src.subagents.opportunity_analysis import opportunity_analysis_agent
 from src.subagents.next_best_action import next_best_action_agent
@@ -18,20 +18,25 @@ from langchain_core.messages import SystemMessage, ToolMessage, HumanMessage
 import asyncio
 
 
-"""Supervisor binds Pydantic schema tools. Execution happens in supervisor_tools node."""
+"""
+Supervisor binds Pydantic schema tools. 
+These will be used to invoke the subagents as tools and pass an explicit instruction to the subagent as a HumanMessage.
+"""
 supervisor_tools = [AnalyzeOpportunity, NextBestAction, PrepareMeeting, GenerateEmail]
 model_with_tools = model.bind_tools(supervisor_tools)
 
 
 async def supervisor_tools_node(state: DealEngineState):
-    """Execute delegate tools by invoking subagent subgraphs (optionally in parallel) and returning ToolMessages."""
+    """
+    Execute delegate tools by invoking subagent subgraphs (optionally in parallel) and returning ToolMessages.
+    """
 
     messages = state["messages"]
     last_message = messages[-1]
     if not getattr(last_message, "tool_calls", None):
         return Command(goto=END)
 
-    # Build async tasks for each tool call
+    # Build tasks for each tool call
     async def run_tool(tool_call):
         name = tool_call["name"]
         args = tool_call.get("args", {})
@@ -89,7 +94,9 @@ async def supervisor_tools_node(state: DealEngineState):
 
 
 async def supervisor_llm(state: DealEngineState):
-    """Supervisor LLM node for routing and coordination."""
+    """
+    Supervisor LLM node that either generates tool calls to the subagents or responds to the user and ends the conversation.
+    """
 
     messages = state["messages"]
     messages_with_system = [SystemMessage(content=SUPERVISOR_PROMPT)] + messages
@@ -102,7 +109,6 @@ def supervisor_should_continue(
 ) -> Literal["supervisor_tools_node", "__end__"]:
     """Route to tool handler for handoffs, or end if no tool calls."""
 
-    # Get the last message
     messages = state["messages"]
     last_message = messages[-1]
 
@@ -113,9 +119,8 @@ def supervisor_should_continue(
 
 
 def create_supervisor(checkpointer):
-    """Create the custom supervisor agent following subagent pattern."""
+    """Create the top-level graph."""
 
-    # Build the supervisor graph
     supervisor_graph = StateGraph(DealEngineState)
     supervisor_graph.add_node("supervisor_llm", supervisor_llm)
     supervisor_graph.add_node("supervisor_tools_node", supervisor_tools_node)
@@ -136,10 +141,9 @@ def create_supervisor(checkpointer):
 
 
 def create_deal_engine(checkpointer):
-    """Create the main deal engine supervisor graph"""
+    """Create the main deal engine graph"""
 
     builder = StateGraph(DealEngineState)
-
     supervisor = create_supervisor(checkpointer)
 
     builder.add_node(
@@ -159,7 +163,6 @@ def create_deal_engine(checkpointer):
     builder.add_node("email_generation_agent", email_generation_agent)
 
     builder.add_edge(START, "supervisor")
-
     builder.add_edge("opportunity_analysis_agent", "supervisor")
     builder.add_edge("next_best_action_agent", "supervisor")
     builder.add_edge("meeting_preparation_agent", "supervisor")

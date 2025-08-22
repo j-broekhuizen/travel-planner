@@ -12,16 +12,19 @@ model_with_tools = model.bind_tools(meeting_preparation_tools)
 
 
 async def tool_handler(state: DealEngineState):
-    """Performs the tool call."""
+    """
+    Tool-calling node that extracts the arguments from the tool call and invokes the tool.
+    Args:
+    - state: DealEngineState
+    Returns:
+    - Command: Command(update={"messages": result})
+    """
 
     result = []
     # Iterate through tool calls
     for tool_call in state["messages"][-1].tool_calls:
-        # Get the tool
         tool = tools_by_name[tool_call["name"]]
-        # Run it async
         observation = await tool.ainvoke(tool_call["args"])
-        # Create a tool message
         result.append(
             {
                 "role": "tool",
@@ -31,7 +34,6 @@ async def tool_handler(state: DealEngineState):
             }
         )
 
-    # Add it to our messages
     return {"messages": result}
 
 
@@ -47,7 +49,6 @@ async def llm(state: DealEngineState):
 def should_continue(state: DealEngineState) -> Literal["tool_handler", "__end__"]:
     """Route to tool handler, or end if no more tool calls."""
 
-    # Get the last message
     messages = state["messages"]
     last_message = messages[-1]
 
