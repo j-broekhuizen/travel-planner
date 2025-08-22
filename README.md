@@ -1,30 +1,24 @@
 
 ## Overview
 
-The Travel Planner uses a supervisor-based architecture to intelligently coordinate and route user requests across specialized AI agents:
+The Travel Planner uses a supervisor/reAct architecture that calls specialized sub-agents as tools:
 
 - **Flight Booking Agent**: Searches and books flights, handles airline preferences and scheduling
 - **Hotel Booking Agent**: Finds and reserves accommodations based on preferences and budget
 - **Car Rental Agent**: Manages vehicle rentals, pickup/dropoff logistics, and transportation needs
 
-## Architecture
-
-```
-User Input → Supervisor → Specialized Agent → Supervisor → Response
-```
 
 The supervisor orchestrates intelligent delegation and coordination, enabling:
-- Multi-agent collaboration and context sharing
+- Multi-agent collaboration and context sharing via calling agents as tools
 - Dynamic tool execution across specialized travel domains
-- Comprehensive trip planning from multiple booking agents
-- Intelligent routing based on travel request analysis and conversation history
-- Quality control and booking coordination
+- Routing based on travel request analysis and conversation history
+
 
 ## Quick Start
 
 ### Prerequisites
 
-- Python 3.8+
+- Python 3.13+
 - OpenAI API key
 
 ### Installation
@@ -100,24 +94,41 @@ travel-planner/
 
 ## Database Schema
 
-The system uses a SQLite database with travel-related tables:
+The system uses a SQLite database (`src/db/travel_data.db`) with comprehensive travel inventory:
 
-### Destinations Table
-| Column      | Type    | Description                |
-| ----------- | ------- | -------------------------- |
-| id          | TEXT    | Destination ID (DEST001)   |
-| city        | TEXT    | City name                  |
-| country     | TEXT    | Country name               |
-| airport_code| TEXT    | Primary airport code       |
-| description | TEXT    | Destination description    |
+### Flights Table
+| Column           | Type | Description                 |
+| ---------------- | ---- | --------------------------- |
+| id               | TEXT | Flight ID (FL001)           |
+| origin_city      | TEXT | Departure city              |
+| destination_city | TEXT | Arrival city                |
+| plane_type       | TEXT | Aircraft model (Boeing 777) |
 
-### Sample Bookings Table  
-| Column     | Type    | Description              |
-| ---------- | ------- | ------------------------ |
-| id         | TEXT    | Booking ID (TRV001)      |
-| destination| TEXT    | Destination city         |
-| type       | TEXT    | flight/hotel/car         |
-| details    | TEXT    | Booking specifics        |
-| price      | REAL    | Price in USD             |
+**Available Routes (3 aircraft types each):**
+- New York → Paris, Los Angeles → Tokyo, Chicago → London
+- Miami → Barcelona, Seattle → Amsterdam, Boston → Rome  
+- San Francisco → Sydney, Denver → Dubai, Atlanta → Bangkok, Houston → Frankfurt
+
+### Hotels Table
+| Column        | Type | Description                     |
+| ------------- | ---- | ------------------------------- |
+| id            | TEXT | Hotel ID (HTL001)               |
+| location_city | TEXT | Hotel city location             |
+| name          | TEXT | Hotel name                      |
+| description   | TEXT | Hotel description and amenities |
+
+**Available Cities (3 hotels each):**
+Paris, Tokyo, London, Barcelona, Amsterdam, Rome, Sydney, Dubai, Bangkok, Frankfurt
+
+### Cars Table  
+| Column      | Type | Description                |
+| ----------- | ---- | -------------------------- |
+| id          | TEXT | Car ID (CAR001)            |
+| pickup_city | TEXT | Car rental pickup city     |
+| make        | TEXT | Vehicle make (Toyota, BMW) |
+| color       | TEXT | Vehicle color              |
+
+**Available Cities (6 car makes each):**
+Paris, Tokyo, London, Barcelona, Amsterdam, Rome, Sydney, Dubai, Bangkok, Frankfurt
 
 
